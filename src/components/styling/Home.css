@@ -1,0 +1,12 @@
+.home {
+  background-color: #e9e9e9;
+  justify-content: center;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.home__row {
+  display: flex;
+  margin: 2% 1%;
+  z-index: 1;
+}

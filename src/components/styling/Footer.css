@@ -1,0 +1,41 @@
+.Footer {
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  background-color: #000000;
+  color: #e0e0e0;
+}
+
+.Footer__lineOne {
+  display: flex;
+}
+
+.Footer__cards {
+  width: 25%;
+  margin: 3% 5%;
+}
+
+.Footer__cards > ul {
+  display: flex;
+  flex-direction: column;
+  list-style-type: none;
+  padding: 2%;
+  margin: 0% 5%;
+}
+
+.Footer__cards > h5 {
+  font-size: 120%;
+  margin: 0% 5%;
+  padding: 2%;
+}
+
+.Footer__cards ul a {
+  text-decoration: none;
+  color: #c8c8c8;
+}
+
+.Footer__final {
+  text-align: center;
+  align-items: center;
+  justify-content: center;
+}
