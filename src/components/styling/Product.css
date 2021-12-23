@@ -7,7 +7,7 @@
   justify-content: center;
 
   margin: 1% 0%;
-  padding: 1%;
+  padding: 2%;
   width: 100%;
   min-width: 100px;
   max-height: 320px;
@@ -46,7 +46,7 @@
   border-color: rgba(255, 255, 255, 0);
   border-radius: 5px;
 
-  margin: 10px;
+  margin: 2%;
   padding: 1.5% 10%;
   background-size: 200% auto;
 
