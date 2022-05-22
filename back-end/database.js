@@ -868,6 +868,34 @@ app.post("/light/lights/review/:email", (req, res) => {
   );
 });
 
+app.get('/light/lights/:coupon_code',(req,res)=>{
+  const coupon_code=req.params.coupon_code
+  let coupon_id=0
+  db.query(
+    "Select coupon_id from coupons where coupon_code=? and date_valid>=CURDATE();",
+    coupon_code,
+    (err, result) => {
+      if (err) {
+        //flag = false;
+        console.log(err);
+        return res.send({ err: err });
+      } else {
+        console.log("Good Request for Coupons");
+        if (result.length > 0) {
+          //flag = true;
+          coupon_id = result[0].coupon_id;
+          return res.send({coupon_id:coupon_id})
+        } else {
+          //flag = false;
+          //return -1;
+          return res.status(200).send({err:"No valid coupons"});
+        }
+      }
+    }
+  );
+
+})
+
 //app.post('light/lights/purchases/returns')
 
 const port = process.env.PORT || 3001;
