@@ -17,6 +17,39 @@ const db = mysql.createConnection({
   database: "lighthousedb",
 });
 
+function delay(time) {
+  return new Promise((resolve) => setTimeout(resolve, time));
+}
+
+function checkCoupon(coupon_code){
+  let flag=true
+  let coupon_id=0
+  db.query(
+    "Select coupon_id from coupons where coupon_code=? and date_valid>=CURDATE();",
+    coupon_code,
+    (err, result) => {
+      if (err) {
+        flag = false;
+        console.log(err);
+        //res.send({ err: err });
+        return -1;
+      } else {
+        console.log("Good Request for Coupons");
+        if (result.length > 0) {
+          flag = true;
+          coupon_id = result[0].coupon_id;
+          return coupon_id
+        } else {
+          flag = false;
+          return -1;
+          //return res.status(200).send("There is no such coupon code");
+        }
+      }
+    }
+  );
+
+}
+
 // db.connect((err) => {
 //   if (err) throw err;
 //   console.log("Connected");
@@ -244,6 +277,7 @@ app.post("/register", async (req, res) => {
   const city = req.body.city;
   const state = req.body.state;
   const cnic = req.body.cnic;
+  let errorMessageEnd = "";
 
   const sql =
     "INSERT INTO Customer (Password,Email,Phone,Address,City,State,CNIC,First_name,Last_name) Values(?,?,?,?,?,?,?,?,?);";
@@ -367,7 +401,7 @@ app.get("/light/:email", async (req, res) => {
       console.log("Sent");
       res
         .status(200)
-        .send({ fname: result[0].first_name, lname: result[0].last_name });
+        .send({ fname: result[0].first_name, lname: result[0].last_name,cust_id:result[0].cust_id });
     }
   });
 });
@@ -384,19 +418,48 @@ app.get("/light/lights/:sorter/:limiter", (req, res) => {
   if (req.params.limiter.length > 0) {
     limit = parseInt(req.params.limiter);
   }
-  db.query(
-    "SELECT * FROM ITEMS ORDER BY ? DESC LIMIT ?",
-    [toSort, limit],
-    (err, result) => {
-      if (err) {
-        res.send({ err: err });
-      }
-      console.log("RESULT SENT");
-      res.status(200).send(result);
+  const sql = `SELECT * FROM ITEMS ORDER BY ${toSort} DESC LIMIT ${limit};`;
+  console.log(sql);
+  db.query(sql, (err, result) => {
+    if (err) {
+      res.send({ err: err });
     }
-  );
+    console.log("RESULT SENT");
+    res.status(200).send(result);
+  });
 });
 
+app.get("/light", (req, res) => {
+  console.log("Here");
+  //const item_title = req.params.Item_title;
+  db.query("SELECT * FROM ITEMS", (err, result) => {
+    if (err) {
+      res.send({ err: err });
+    }
+    if (result.length > 0) {
+      //emailFound=true;
+      res.send(result);
+    }
+  });
+});
+
+app.get("/light/:id/:required", (req, res) => {
+  //console.log("Here");
+  //const item_title = req.params.Item_title;
+  const id = req.params.id;
+  const required = req.params.required;
+  db.query("SELECT * FROM ITEMS where item_id=?", [id], (err, result) => {
+    if (err) {
+      res.send({ err: err });
+    }
+    if (result.length > 0) {
+      //emailFound=true;
+      res.send({ Available: result[0].stock > required });
+    }
+  });
+});
+
+//Show Purchases
 app.get("/lights/purchases/:email", (req, res) => {
   const email = req.params.email;
   let emailFound = false;
@@ -424,6 +487,7 @@ app.get("/lights/purchases/:email", (req, res) => {
   });
 });
 
+//Show Track Purchases
 app.get("/lights/trackpurchases/:email", (req, res) => {
   const email = req.params.email;
   let emailFound = false;
@@ -436,7 +500,7 @@ app.get("/lights/trackpurchases/:email", (req, res) => {
       console.log("EMAIL FOUND IN TRACK PURCHASES");
       //emailFound=true;
       db.query(
-        "SELECT * FROM PURCHASES P,CUSTOMER C,TrackPurchases T where P.CUST_ID=C.CUST_ID and P.Tracking_ID=T.Tracking_ID and  EMAIL=?;",
+        "SELECT P.invoice_id,T.purchase_state,P.date_Purchased,P.amount_due,P.is_paid,M.payment_type FROM PURCHASES P,CUSTOMER C,TrackPurchases T,PaymentMethod M where P.CUST_ID=C.CUST_ID and P.Tracking_ID=T.Tracking_ID and P.Payment_id=M.payment_id and EMAIL=?;",
         email,
         (err, result) => {
           if (err) {
@@ -454,35 +518,32 @@ app.get("/lights/trackpurchases/:email", (req, res) => {
   });
 });
 
-app.get("/Light/Items/Reviews/:Item_title", (req, res) => {
-  const item_title = req.params.Item_title;
-  db.query(
-    "SELECT * FROM ITEMS WHERE UPPER(TITLE)=?",
-    [item_title],
-    (err, result) => {
-      if (err) {
-        res.send({ err: err });
-      }
-      if (result.length > 0) {
-        //emailFound=true;
-        db.query(
-          "SELECT * FROM ITEMS I,ITEMREVIEWS R where I.item_ID=R.item_ID and  UPPER(title)=?;",
-          item_title,
-          (err, result) => {
-            if (err) {
-              res.send({ err: err });
-            }
-            if (result.length > 0) return res.send(result);
-            else {
-              res.send("NO REVIEWS YET!");
-            }
-          }
-        );
-      } else {
-        res.send("NO SUCH ITEM EXISTS!");
-      }
+//Show Reviews for an Item
+app.get("/Light/Items/Reviews/:id", (req, res) => {
+  const id = req.params.id;
+  db.query("SELECT * FROM ITEMS WHERE item_id=?", [id], (err, result) => {
+    if (err) {
+      res.send({ err: err });
     }
-  );
+    if (result.length > 0) {
+      //emailFound=true;
+      db.query(
+        "SELECT * FROM ITEMS I,ITEMREVIEWS R where I.item_ID=R.item_ID and I.item_id=?;",
+        id,
+        (err, result) => {
+          if (err) {
+            res.send({ err: err });
+          }
+          if (result.length > 0) return res.send(result);
+          else {
+            res.send("NO REVIEWS YET!");
+          }
+        }
+      );
+    } else {
+      res.send("NO SUCH ITEM EXISTS!");
+    }
+  });
 });
 
 app.get("/Light/Items/:Item_title", (req, res) => {
@@ -502,6 +563,7 @@ app.get("/Light/Items/:Item_title", (req, res) => {
   );
 });
 
+//Show Returns
 app.get("/light/returns/:emails", (req, res) => {
   const email = req.params.emails;
   //let emailFound=false;
@@ -546,13 +608,17 @@ date_Purchased that day's DATE,
 amount_due depends on payment_type,
 isPaid too
 */
+
+//Make a Purchase
+
+//For Bilal
 app.post("/light/lights/purchase/:email", async (req, res) => {
   console.log("Purchase input", req.body);
   const email = req.params.email;
   const purchase_items = req.body.purchase_items;
-  let purchased_prices = new Array();
-  let purchased_ids = new Array();
-  let purchased_stock = new Array();
+  let purchased_prices = [];
+  let purchased_ids = [];
+  let purchased_stock = [];
   let invoice_ID = 0;
   /*
   Purchase_Items=[{
@@ -573,73 +639,64 @@ app.post("/light/lights/purchase/:email", async (req, res) => {
   let amount_due = 0;
   //Payment_type
   //Title,Stock,Price
-  if (coupon_code) {
-    db.query(
-      "Select coupon_id from coupons where coupon_code=? and date_valid>=CURDATE();",
-      coupon_code,
-      (err, result) => {
-        if (err) {
-          flag = false;
-          console.log(err);
-          res.send({ err: err });
-          return;
-        } else {
-          console.log("Good Request for Coupons");
-          if (result.length > 0) {
-            flag = true;
-            coupon_id = result.coupon_id;
-          } else {
-            flag = false;
-            return res.status(200).send("There is no such coupon code");
-          }
-        }
-      }
-    );
+  if (coupon_code!==null) {
+    flag=false
+    coupon_id=await checkCoupon(coupon_code)
   }
-  if ((flag && !coupon_code) || (flag && coupon_id != 0)) {
+  if(coupon_id===-1){
+    return res.send({message:"Not a valid Coupon!!!"})
+  }
+  if ((flag && coupon_code===null) || (!flag && coupon_id !== 0)) {
     //Insert Payment Method
-    db.query(
-      "Insert into PaymentMethod(payment_type) values(?);",
-      payment_type,
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          return res.send({ err: err });
-        }
-        //res.send({insertId:result.insertId})
-        console.log("Values Inserted");
-        payment_id = result.insertId;
+    console.log("Inside Payment Method")
+    // db.query(
+    //   "Insert into PaymentMethod(payment_type) values(?);",
+    //   payment_type,
+    //   (err, result) => {
+    //     if (err) {
+    //       console.log(err);
+    //       return res.send({ err: err });
+    //     }
+    //     //res.send({insertId:result.insertId})
+    //     console.log("Values Inserted");
+    //     payment_id = result[0].insertId;
+        //Tracking
+        console.log("Tracking Now!")
+        // db.query(
+        //   "Insert into TrackPurchases(purchase_state) values('Preparing');",
+        //   (err, result) => {
+        //     if (err) {
+        //       console.log(err);
+        //       return res.send({ err: err });
+        //     } else {
+        //       //res.send({insertId:result.insertId})
+        //       console.log("Values Inserted");
+        //       tracking_id = result.insertId;
+        //     }
+        //   }
+        // );
+        console.log("Email Now")
+        db.query(
+          "Select cust_id from Customer where email=?;",
+          email,
+          (err, result) => {
+            if (err) {
+              console.log(err);
+              return res.send({ err: err });
+            } else {
+              console.log("Email Recieved");
+              cust_id = result[0].custid;
+            }
+          }
+
+        );
       }
-    );
+    
     //Tracking
-    db.query(
-      "Insert into TrackPurchases(purchase_state) values('Preparing');",
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          return res.send({ err: err });
-        } else {
-          //res.send({insertId:result.insertId})
-          console.log("Values Inserted");
-          tracking_id = result.insertId;
-        }
-      }
-    );
+    
 
     //Email
-    db.query(
-      "Select cust_id from Customer where email=?;",
-      email,
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          return res.send({ err: err });
-        } else {
-          console.log("Email Recieved");
-          cust_id = result.custid;
-        }
-      }
-    );
+    
 
     purchase_items.forEach((item) => {
       db.query(
@@ -733,70 +790,82 @@ date_reviewed
 text
 rating
 */
+
+//Add a review
 app.post("/light/lights/review/:email", (req, res) => {
   const text = req.body.text;
   const rating = req.body.rating;
   const email = req.params.email;
+  let item_id = req.body.id;
+
   let invoice_id = 0;
-  let item_id = 0;
   let flag = false;
   let ratings = 0;
+  let total = 0;
   db.query(
     `Select U.invoice_id,U.item_id,I.rating from PurchaseItems U,Purchases P,Items I,Customer C where
-  P.Cust_ID=C.Cust_ID and U.invoice_id=P.invoice_id and I.item_id=U.item_id and C.email=?`,
-    email,
+  P.Cust_ID=C.Cust_ID and U.invoice_id=P.invoice_id and I.item_id=U.item_id and C.email=? and U.item_id=?`,
+    [email, item_id],
     (err, result) => {
       if (err) {
         console.log(err);
         res.send({ err: err });
       }
-      invoice_id = result.invoice_id;
-      item_id = result.item_id;
-      ratings = result.rating;
+      invoice_id = result[0].invoice_id;
+      item_id = result[0].item_id;
+      ratings = result[0].rating;
       console.log("Purchased");
+      console.log(result);
       flag = true;
-      let total = 0;
+      if (result.length > 0) {
+        console.log("Review Insertion");
+        db.query(
+          `Insert into ItemReviews(invoice_id,item_id,date_Reviewed,text,Rating)
+        values(?,?,CURDATE(),?,?)`,
+          [invoice_id, item_id, text, rating],
+          (err, result) => {
+            if (err) {
+              console.log(err);
+              res.send({ err: err });
+            }
+            console.log("Review Values Inserted");
+            console.log(result);
+            //res.send({ insertId: result.insertId });
+            if (result) {
+              console.log("Calculating..");
+              db.query(
+                'Select count(*) as "TOTAL" from itemreviews group by item_id having item_id=?',
+                item_id,
+                (err, result) => {
+                  if (err) {
+                    console.log(err);
+                    res.send({ err: err });
+                  }
+                  console.log("Total");
+                  console.log(result);
+                  total = result[0].TOTAL;
+                  if (result.length > 0) {
+                    db.query(
+                      `Update Items set rating=? where item_id=?`,
+                      [Math.round((ratings + rating) / total), item_id],
+                      (err, result) => {
+                        if (err) {
+                          console.log(err);
+                          res.send({ err: err });
+                        }
+                        console.log("RATINGS UPDATED!");
+                        res.send({ Inserted: true });
+                      }
+                    );
+                  }
+                }
+              );
+            }
+          }
+        );
+      }
     }
   );
-  if (flag) {
-    console.log("Review Insertion");
-    db.query(
-      `Insert into ItemReviews(invoice_id,item_id,date_Reviewed,text,Rating)
-    values(?,?,CURDATE(),?,?`,
-      [invoice_id, item_id, text, rating],
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          res.send({ err: err });
-        }
-        console.log("Review Values Inserted");
-
-        res.send({ insertId: result.insertId });
-      }
-    );
-    db.query(
-      'Select count(*) as "TOTAL" from itemreviews groupby(item_id) having item_id=?',
-      item_id,
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          res.send({ err: err });
-        }
-        total = result.total;
-      }
-    );
-    db.query(
-      `Update Items set rating=? where item_id=?`,
-      [(ratings + rating) / total, item_id],
-      (err, result) => {
-        if (err) {
-          console.log(err);
-          res.send({ err: err });
-        }
-        console.log("RATINGS UPDATED!");
-      }
-    );
-  }
 });
 
 //app.post('light/lights/purchases/returns')
