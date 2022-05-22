@@ -21,9 +21,9 @@ function delay(time) {
   return new Promise((resolve) => setTimeout(resolve, time));
 }
 
-function checkCoupon(coupon_code){
-  let flag=true
-  let coupon_id=0
+function checkCoupon(coupon_code) {
+  let flag = true;
+  let coupon_id = 0;
   db.query(
     "Select coupon_id from coupons where coupon_code=? and date_valid>=CURDATE();",
     coupon_code,
@@ -38,7 +38,7 @@ function checkCoupon(coupon_code){
         if (result.length > 0) {
           flag = true;
           coupon_id = result[0].coupon_id;
-          return coupon_id
+          return coupon_id;
         } else {
           flag = false;
           return -1;
@@ -47,7 +47,6 @@ function checkCoupon(coupon_code){
       }
     }
   );
-
 }
 
 // db.connect((err) => {
@@ -105,6 +104,14 @@ const createPaymentMethod = `Create table PaymentMethod(
     payment_type varchar(50) not null
 );`;
 
+//Invoice_Id-Auto
+//Cust through email
+//payment_id COD
+//tracking_id 1,Preparing
+//coupon_id through coupon api
+//date curr_date
+//amount_due
+//is paid
 const createPurchases = `Create table Purchases(
     invoice_ID int not null auto_increment primary key,
     cust_id int not null,
@@ -399,9 +406,12 @@ app.get("/light/:email", async (req, res) => {
     }
     if (result.length > 0) {
       console.log("Sent");
-      res
-        .status(200)
-        .send({ fname: result[0].first_name, lname: result[0].last_name,cust_id:result[0].cust_id });
+      res.status(200).send({
+        fname: result[0].first_name,
+        lname: result[0].last_name,
+        cust_id: result[0].cust_id,
+        email: result[0].email,
+      });
     }
   });
 });
@@ -639,16 +649,16 @@ app.post("/light/lights/purchase/:email", async (req, res) => {
   let amount_due = 0;
   //Payment_type
   //Title,Stock,Price
-  if (coupon_code!==null) {
-    flag=false
-    coupon_id=await checkCoupon(coupon_code)
+  if (coupon_code !== null) {
+    flag = false;
+    coupon_id = await checkCoupon(coupon_code);
   }
-  if(coupon_id===-1){
-    return res.send({message:"Not a valid Coupon!!!"})
+  if (coupon_id === -1) {
+    return res.send({ message: "Not a valid Coupon!!!" });
   }
-  if ((flag && coupon_code===null) || (!flag && coupon_id !== 0)) {
+  if ((flag && coupon_code === null) || (!flag && coupon_id !== 0)) {
     //Insert Payment Method
-    console.log("Inside Payment Method")
+    console.log("Inside Payment Method");
     // db.query(
     //   "Insert into PaymentMethod(payment_type) values(?);",
     //   payment_type,
@@ -660,124 +670,120 @@ app.post("/light/lights/purchase/:email", async (req, res) => {
     //     //res.send({insertId:result.insertId})
     //     console.log("Values Inserted");
     //     payment_id = result[0].insertId;
-        //Tracking
-        console.log("Tracking Now!")
-        // db.query(
-        //   "Insert into TrackPurchases(purchase_state) values('Preparing');",
-        //   (err, result) => {
-        //     if (err) {
-        //       console.log(err);
-        //       return res.send({ err: err });
-        //     } else {
-        //       //res.send({insertId:result.insertId})
-        //       console.log("Values Inserted");
-        //       tracking_id = result.insertId;
-        //     }
-        //   }
-        // );
-        console.log("Email Now")
-        db.query(
-          "Select cust_id from Customer where email=?;",
-          email,
-          (err, result) => {
-            if (err) {
-              console.log(err);
-              return res.send({ err: err });
-            } else {
-              console.log("Email Recieved");
-              cust_id = result[0].custid;
-            }
-          }
-
-        );
-      }
-    
     //Tracking
-    
-
-    //Email
-    
-
-    purchase_items.forEach((item) => {
-      db.query(
-        "Select item_id,price,stock from Items where title=?",
-        item.item_title,
-        (err, result) => {
-          if (err) {
-            console.log(err);
-            return res.send({ err: err });
-          } else {
-            if (result.length > 0) {
-              if (parseInt(result.stock) - parseInt(item.stock) < 0) {
-                console.log("Not Enough Stock!");
-                return res.status(400).send("OUT OF STOCK!");
-              } else {
-                purchased_prices.push(parseInt(result.price));
-                purchased_ids.push(result.item_id);
-                purchased_stock.push(parseInt(item.stock));
-                total_price += parseInt(result.price) * parseInt(item.stock);
-
-                //Update Stock
-                db.query(
-                  "Update Items set stock=? where item_id=?",
-                  [
-                    parseInt(result.stock) - parseInt(item.stock),
-                    parseInt(result.item_id),
-                  ],
-                  (err, result) => {
-                    if (err) {
-                      console.log("Error Updating Items");
-                      return res.send({ err: err });
-                    }
-                    console.log("Items Updated!");
-                    //res.send(result);
-                  }
-                );
-              }
-            }
-          }
-        }
-      );
-    });
-
-    //Purchase Insert
-    if (payment_type == "COD") {
-      isPaid = 0;
-      amount_due = total_price;
-    } else {
-      isPaid = 1;
-    }
+    console.log("Tracking Now!");
+    // db.query(
+    //   "Insert into TrackPurchases(purchase_state) values('Preparing');",
+    //   (err, result) => {
+    //     if (err) {
+    //       console.log(err);
+    //       return res.send({ err: err });
+    //     } else {
+    //       //res.send({insertId:result.insertId})
+    //       console.log("Values Inserted");
+    //       tracking_id = result.insertId;
+    //     }
+    //   }
+    // );
+    console.log("Email Now");
     db.query(
-      "Insert into Purchases(cust_id,payment_id,tracking_id,coupon_id,date_Purchased,amount_due,is_paid) values(?,?,?,?,CURDATE(),?,?)",
-      [cust_id, payment_id, tracking_id, coupon_id, amount_due, isPaid],
+      "Select cust_id from Customer where email=?;",
+      email,
       (err, result) => {
         if (err) {
           console.log(err);
           return res.send({ err: err });
         } else {
-          console.log("Purchase Values Inserted");
-          invoice_ID = result.insertId;
-          res.send({ insertId: result.insertId });
+          console.log("Email Recieved");
+          cust_id = result[0].custid;
         }
       }
     );
+  }
 
-    //Purchase_Items Input
-    for (let i = 0; i < purchased_ids.length; i++) {
-      db.query(
-        "insert into Purchaseitems(invoice_id,item_id,valid_return_date,quantity,price) values(?,?,CURDATE()+14,?,?)",
-        [invoice_ID, purchased_ids[i], purchased_stock[i], purchased_prices[i]],
-        (err, result) => {
-          if (err) {
-            console.log(err);
-            return res.send({ err: err });
-          } else {
-            console.log("Purchase Items Values Inserted");
-            //res.send({insertId: result.insertId})
+  //Tracking
+
+  //Email
+
+  purchase_items.forEach((item) => {
+    db.query(
+      "Select item_id,price,stock from Items where title=?",
+      item.item_title,
+      (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.send({ err: err });
+        } else {
+          if (result.length > 0) {
+            if (parseInt(result.stock) - parseInt(item.stock) < 0) {
+              console.log("Not Enough Stock!");
+              return res.status(400).send("OUT OF STOCK!");
+            } else {
+              purchased_prices.push(parseInt(result.price));
+              purchased_ids.push(result.item_id);
+              purchased_stock.push(parseInt(item.stock));
+              total_price += parseInt(result.price) * parseInt(item.stock);
+
+              //Update Stock
+              db.query(
+                "Update Items set stock=? where item_id=?",
+                [
+                  parseInt(result.stock) - parseInt(item.stock),
+                  parseInt(result.item_id),
+                ],
+                (err, result) => {
+                  if (err) {
+                    console.log("Error Updating Items");
+                    return res.send({ err: err });
+                  }
+                  console.log("Items Updated!");
+                  //res.send(result);
+                }
+              );
+            }
           }
         }
-      );
+      }
+    );
+  });
+
+  //Purchase Insert
+  if (payment_type == "COD") {
+    isPaid = 0;
+    amount_due = total_price;
+  } else {
+    isPaid = 1;
+  }
+  db.query(
+    "Insert into Purchases(cust_id,payment_id,tracking_id,coupon_id,date_Purchased,amount_due,is_paid) values(?,?,?,?,CURDATE(),?,?)",
+    [cust_id, payment_id, tracking_id, coupon_id, amount_due, isPaid],
+    (err, result) => {
+      if (err) {
+        console.log(err);
+        return res.send({ err: err });
+      } else {
+        console.log("Purchase Values Inserted");
+        invoice_ID = result.insertId;
+        res.send({ insertId: result.insertId });
+      }
     }
+  );
+
+  //Purchase_Items Input
+  for (let i = 0; i < purchased_ids.length; i++) {
+    db.query(
+      "insert into Purchaseitems(invoice_id,item_id,valid_return_date,quantity,price) values(?,?,CURDATE()+14,?,?)",
+      [invoice_ID, purchased_ids[i], purchased_stock[i], purchased_prices[i]],
+      (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.send({ err: err });
+        } else {
+          console.log("Purchase Items Values Inserted");
+          //res.send({insertId: result.insertId})
+        }
+      }
+    );
   }
 });
 
@@ -868,9 +874,138 @@ app.post("/light/lights/review/:email", (req, res) => {
   );
 });
 
-app.get('/light/lights/:coupon_code',(req,res)=>{
-  const coupon_code=req.params.coupon_code
-  let coupon_id=0
+app.post("/light/lights/payment", (req, res) => {
+  const purchase_items = req.body.items;
+  console.log(typeof purchase_items);
+  console.log(purchase_items);
+  let purchased_prices = [];
+  let purchased_ids = [];
+  let purchased_stock = [];
+  let total_price = 0;
+  purchase_items.forEach((item) => {
+    db.query(
+      "Select item_id,price,stock from Items where title=?",
+      item.item_title,
+      (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.send({ err: err });
+        } else {
+          if (result.length > 0) {
+            if (parseInt(result[0].stock) - parseInt(item.stock) < 0) {
+              console.log("Not Enough Stock!");
+              return res.status(400).send("OUT OF STOCK!");
+            } else {
+              purchased_prices.push(parseInt(result[0].price));
+              purchased_ids.push(result[0].item_id);
+              purchased_stock.push(parseInt(item.stock));
+              total_price += parseInt(result[0].price) * parseInt(item.stock);
+
+              //Update Stock
+              db.query(
+                "Update Items set stock=? where item_id=?",
+                [
+                  parseInt(result[0].stock) - parseInt(item.stock),
+                  parseInt(result[0].item_id),
+                ],
+                (err, result) => {
+                  if (err) {
+                    console.log("Error Updating Items");
+                    return res.send({ err: err });
+                  }
+                  console.log("Items Updated!");
+                  //res.send(result);
+                }
+              );
+            }
+          }
+        }
+      }
+    );
+  });
+  setTimeout(() => {
+    console.log("Total Price: %d", total_price);
+    return res.send({
+      Total: total_price,
+      purchased_prices: purchased_prices,
+      purchased_ids: purchased_ids,
+      purchased_stock: purchased_stock,
+    });
+  }, 2000);
+});
+
+app.post("/light/lights/purchases", (req, res) => {
+  //Invoice_Id-Auto
+  //Cust through email
+  //payment_id COD
+  //tracking_id 1,Preparing
+  //coupon_id through coupon api
+  //date curr_date
+  //amount_due
+  //is paid
+  const cust_id = req.body.cust_id;
+  const payment_type = req.body.payment_type;
+  let payment_id = 1;
+
+  if (payment_type === "Card") {
+    payment_id = 2;
+  }
+  const coupon_id = null || req.body.coupon_id;
+  const discount = req.body.discount;
+  let amount_due = req.body.total;
+
+  if (discount > 0) {
+    amount_due = (discount / 100) * amount_due + amount_due;
+  }
+  let is_paid = 0;
+  if (payment_id === 2) {
+    is_paid = 1;
+  }
+
+  db.query(
+    "Insert into Purchases(cust_id,payment_id,tracking_id,coupon_id,date_Purchased,amount_due,is_paid) values(?,?,?,?,CURDATE(),?,?)",
+    [cust_id, payment_id, 1, coupon_id, amount_due, is_paid],
+    (err, result) => {
+      if (err) {
+        console.log(err);
+        return res.send({ err: err });
+      } else {
+        console.log("Purchase Values Inserted");
+        res.send({ insertId: result.insertId });
+      }
+    }
+  );
+});
+
+app.post("/light/lights/paymentItems", (req, res) => {
+  const purchased_ids = req.body.purchased_ids;
+  const purchased_stock = req.body.purchased_stock;
+  const purchased_prices = req.body.purchased_prices;
+  const invoice_ID = req.body.insertId;
+  for (let i = 0; i < purchased_ids.length; i++) {
+    db.query(
+      "insert into Purchaseitems(invoice_id,item_id,valid_return_date,quantity,price) values(?,?,DATE_ADD(CURDATE(),INTERVAL 14 DAY),?,?)",
+      [invoice_ID, purchased_ids[i], purchased_stock[i], purchased_prices[i]],
+      (err, result) => {
+        if (err) {
+          console.log(err);
+          return res.send({ err: err });
+        } else {
+          console.log("Purchase Items Values Inserted");
+          //res.send({insertId: result.insertId})
+        }
+      }
+    );
+  }
+  setTimeout(() => {
+    //console.log("Total Price: %d", total_price);
+    return res.status(200).send({ message: "Purchase Items Inserted!" });
+  }, 2000);
+});
+
+app.get("/light/lights/:coupon_code", (req, res) => {
+  const coupon_code = req.params.coupon_code;
+  //let coupon_id = 0;
   db.query(
     "Select coupon_id from coupons where coupon_code=? and date_valid>=CURDATE();",
     coupon_code,
@@ -883,18 +1018,19 @@ app.get('/light/lights/:coupon_code',(req,res)=>{
         console.log("Good Request for Coupons");
         if (result.length > 0) {
           //flag = true;
-          coupon_id = result[0].coupon_id;
-          return res.send({coupon_id:coupon_id})
+          return res.send({
+            coupon_id: result[0].coupon_id,
+            discount: result[0].discount,
+          });
         } else {
           //flag = false;
           //return -1;
-          return res.status(200).send({err:"No valid coupons"});
+          return res.status(200).send({ err: "No valid coupons" });
         }
       }
     }
   );
-
-})
+});
 
 //app.post('light/lights/purchases/returns')
 
